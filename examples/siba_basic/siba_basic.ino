@@ -6,8 +6,6 @@
 
 #include <SIBA.h>
 
-SIBA siba;
-
 const char* ssid  = "your nat router ip";
 const char* password  = "your nat router password";
 const char* hardware_auth_key  = "your H/W auth key in here";
@@ -25,11 +23,11 @@ void setup() {
     *  event function format is void func()
     */ 
 
-    siba.add_event(10, event_test);
+    siba.event_add(10, event_test);
 }
 
 void loop() {
-    siba.verify_connection();
+    siba.mqtt_verify_connect();
 
     // put your main code here, to run repeatedly:
 }

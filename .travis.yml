@@ -1,4 +1,4 @@
-language: c
+﻿language: c
 
 # 해당 브랜치에 push시에 수행
 branches:
@@ -33,11 +33,6 @@ install:
 # boards manager not working on 1.6.7 - 1.6.8
   - arduino --pref "boardsmanager.additional.urls=http://arduino.esp8266.com/stable/package_esp8266com_index.json" --save-prefs
 # install lib arduino json not working in 1.6.5
-#  - arduino --install-library "ArduinoJson"
-  #- git clone https://github.com/bblanchon/ArduinoJson /usr/local/share/arduino/libraries/ArduinoJson
-  - arduino --install-boards esp8266:esp8266
-  - arduino --board esp8266:esp8266:generic --save-prefs
-  - arduino --pref "compiler.warning_level=all" --save-prefs
 
 #push 시에 수행되는 명령
 script:
