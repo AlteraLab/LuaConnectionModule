@@ -105,7 +105,8 @@ size_t SIBA::add_event(size_t code, SB_ACTION)
 
   //0번 코드는 특수한 코드, 단 한 번만 등록될 수 있음, 생성자에서 등륵됨
   //hw 개발자는 0번 코드를 등록할 수 없음.
-  if (code == 0 && action_cnt){
+  if (code == 0 && action_cnt)
+  {
     Serial.println(F("cannot register this code and event"));
     return ret;
   }
@@ -171,7 +172,7 @@ void SIBA::regist_dev()
 {
   sb_keypair sets[] = {
       {"dev_mac", this->mac_address},
-      {"cur_ip", this->cur_ip},
+      //{"cur_ip", this->cur_ip},
       {"dev_type", this->dev_type}};
 
 #if defined(ESP8266) || defined(ESP32) || defined(ARDUINO)
@@ -214,10 +215,11 @@ void SIBA::mqtt_reconnect()
 
     // Create a random client ID
     String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
+    //clientId += String(random(0xffff), HEX);
+    clientId += this->mac_address;
 
     // Attempt to connect
-    if (this->client.connect(clientId.c_str()))
+    if (this->client.connect(clientId.c_str(), DEV_WILL, 1, 1, this->mac_address.c_str()))
     {
       Serial.println(F("connected"));
 
@@ -281,7 +283,8 @@ void SIBA::mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
 
     SB_ACTION = context.grep_event(code);
     size_t action_result = context.exec_event(sb_action);
-    if(code) context.pub_result(action_result); //code가 0번이 아니라면 허브에게 결과 전송
+    if (code)
+      context.pub_result(action_result); //code가 0번이 아니라면 허브에게 결과 전송
   }
 }
 

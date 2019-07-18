@@ -13,6 +13,7 @@
 #define DEV_CTRL "dev/control"
 #define DEV_CTRL_END "dev/control/end"
 #define DEV_REG "dev/register"
+#define DEV_WILL "dev/will"
 #define MQTT_SERVER "192.168.2.1"
 #define MQTT_PORT 1883
 #define REGISTER_EVENT_CODE 0
