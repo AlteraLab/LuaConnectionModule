@@ -16,15 +16,15 @@
 #define DEV_WILL "dev/will"
 #define MQTT_SERVER "192.168.2.1"
 #define MQTT_PORT 1883
-#define REGISTER_EVENT_CODE 0
+#define REGISTER_EVENT_CODE -1
 
-#define SB_ACTION void (*sb_action)()
+#define SB_ACTION size_t (*sb_action)(size_t)
 
 #include "includes/PubSubClient/PubSubClient.h"
 #include <ESP8266WiFi.h>
 
 typedef struct sb_event{
-    size_t sb_code;
+    int sb_code;
     SB_ACTION;
 }sb_event;
 
@@ -53,23 +53,27 @@ class SIBA{
 
         static SIBA context;
 
-        void (*grep_event(size_t code))();
-        size_t exec_event(SB_ACTION);
+        size_t (*grep_event(int code))(size_t);
+        size_t exec_event(SB_ACTION, size_t before);
         size_t pub_result(size_t action_res);
         void regist_dev();
         void subscribe_topic(char* topic);
-        void publish_topic(char* topic, sb_keypair sets[], uint16_t len);
+        void publish_topic(char* topic, char* buffer, uint16_t len);
         void init_wifi(char* ssid, char* pwd);
         void mqtt_reconnect();
         static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length);
 
-        static void register_event(); //0번 코드에 대응되는 이벤트
+        static size_t register_event(size_t before); //0번 코드에 대응되는 이벤트
 
     public:
         SIBA();
 
+        //production 환경에서 사용하는 init
+        size_t init(const char* auth_key); 
+
+        //development 환경에서 사용하는 init
         size_t init(const char* ssid, const char* pwd, const char* dev_type); 
-        size_t add_event(size_t code, SB_ACTION);
+        size_t add_event(int code, SB_ACTION);
         void verify_connection();
 };
 

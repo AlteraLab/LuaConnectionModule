@@ -34,11 +34,16 @@ SIBA::SIBA()
   this->add_event(REGISTER_EVENT_CODE, SIBA::register_event); //디바이스가 등록됬을 때 수행 될 이벤트
 }
 
-void SIBA::register_event()
+size_t SIBA::register_event(size_t before)
 {
   //디바이스 정상 등록 시 로그 출력 및 LED 점등
   Serial.println(F("device register is finished"));
   is_reg = 1;
+  return is_reg;
+}
+
+size_t SIBA::init(const char* auth_key){
+  return 1;
 }
 
 size_t SIBA::init(const char *ssid, const char *pwd, const char *dev_type)
@@ -99,13 +104,13 @@ void SIBA::init_wifi(char *ssid, char *pwd)
   Serial.println(this->mac_address);
 }
 
-size_t SIBA::add_event(size_t code, SB_ACTION)
+size_t SIBA::add_event(int code, SB_ACTION)
 {
   size_t ret = 0;
 
   //0번 코드는 특수한 코드, 단 한 번만 등록될 수 있음, 생성자에서 등륵됨
   //hw 개발자는 0번 코드를 등록할 수 없음.
-  if (code == 0 && action_cnt)
+  if (code == REGISTER_EVENT_CODE && action_cnt)
   {
     Serial.println(F("cannot register this code and event"));
     return ret;
@@ -117,8 +122,8 @@ size_t SIBA::add_event(size_t code, SB_ACTION)
   return ret;
 }
 
-// void func() 타입의 함수 포인터 반환 함수
-void (*SIBA::grep_event(size_t code))()
+// size_t func(size_t) 타입의 함수 포인터 반환 함수
+size_t (*SIBA::grep_event(int code))(size_t)
 {
   //sequential search
   size_t temp_index = action_cnt;
@@ -136,13 +141,13 @@ void (*SIBA::grep_event(size_t code))()
   return sb_action;
 }
 
-size_t SIBA::exec_event(SB_ACTION)
+size_t SIBA::exec_event(SB_ACTION, size_t before)
 {
   size_t ret = 0;
 
   if (ret = sb_action != NULL)
   {
-    sb_action(); //액션 수행
+    ret = sb_action(before); //액션 수행
   }
   else
   {
@@ -156,31 +161,44 @@ size_t SIBA::exec_event(SB_ACTION)
 
 size_t SIBA::pub_result(size_t action_res)
 {
-  //이벤트의 수행 종료 후 결과를 허브에게 전송
-  sb_keypair sets[] = {
-      {"status", "false"},
-      {"dev_mac", mac_address}};
+  StaticJsonDocument<256> doc;
+  char buffer[256];
+
+  JsonObject object = doc.to<JsonObject>();
+  object[F("dev_mac")] = this->mac_address;
+
+
   if (action_res)
   {
-    sets[0].value = "true";
+    object[F("status")] = 200;
+  }
+  else{
+    object[F("status")] = 500;
   }
 
-  this->publish_topic(DEV_CTRL_END, sets, sizeof(sets) / sizeof(sets[0]));
+  uint16_t n = serializeJson(doc, buffer);
+
+  this->publish_topic(DEV_CTRL_END, buffer, n);
 }
 
 void SIBA::regist_dev()
 {
-  sb_keypair sets[] = {
-      {"dev_mac", this->mac_address},
-      //{"cur_ip", this->cur_ip},
-      {"dev_type", this->dev_type}};
+  StaticJsonDocument<256> doc;
+  char buffer[256];
+
+  JsonObject object = doc.to<JsonObject>();
+  Serial.println(this->mac_address);
+  object[F("dev_mac")] = this->mac_address;
+  object[F("dev_type")] = this->dev_type;
+
+  uint16_t n = serializeJson(doc, buffer);
 
 #if defined(ESP8266) || defined(ESP32) || defined(ARDUINO)
   Serial.println(F("device registration request send to hub"));
 #endif
 
   //허브에게 디바이스 등록 정보 전송
-  this->publish_topic(DEV_REG, sets, sizeof(sets) / sizeof(sets[0]));
+  this->publish_topic(DEV_REG, buffer, n);
 }
 
 void SIBA::subscribe_topic(char *topic)
@@ -191,17 +209,8 @@ void SIBA::subscribe_topic(char *topic)
   this->client.subscribe(topic);
 }
 
-void SIBA::publish_topic(char *topic, sb_keypair sets[], uint16_t len)
+void SIBA::publish_topic(char *topic, char* buffer, uint16_t n)
 {
-  StaticJsonDocument<256> doc;
-  char buffer[256];
-
-  while (len--)
-  {
-    doc[sets[len].key] = sets[len].value;
-  }
-
-  size_t n = serializeJson(doc, buffer);
   Serial.println(F("publish topic"));
   this->client.publish(topic, buffer, n);
 }
@@ -218,8 +227,10 @@ void SIBA::mqtt_reconnect()
     //clientId += String(random(0xffff), HEX);
     clientId += this->mac_address;
 
+    String willMessage = this->mac_address + "," + this->dev_type;
+
     // Attempt to connect
-    if (this->client.connect(clientId.c_str(), DEV_WILL, 1, 1, this->mac_address.c_str()))
+    if (this->client.connect(clientId.c_str(), DEV_WILL, 1, 1, willMessage.c_str()))
     {
       Serial.println(F("connected"));
 
@@ -274,18 +285,23 @@ void SIBA::mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
 
   Serial.println(msg);
 
-  JsonArray cmd_list = doc[F("cmd")].as<JsonArray>();
+  //json deserialize 수행
+  JsonArray cmd_list = doc[F("cmdList")].as<JsonArray>();
+  int code = -1;
+  size_t action_result=0;
   for (int i = cmd_list.size() - 1; i >= 0; i--)
   {
     JsonObject elem = cmd_list.getElement(i).as<JsonObject>();
 
-    int code = elem[F("cmd_code")];
+    code = elem[F("eventCode")];
 
     SB_ACTION = context.grep_event(code);
-    size_t action_result = context.exec_event(sb_action);
-    if (code)
-      context.pub_result(action_result); //code가 0번이 아니라면 허브에게 결과 전송
+    action_result = context.exec_event(sb_action, action_result);
+
   }
+  //code가 -1번이 아니라면 허브에게 결과 전송
+  if (code != -1)
+    context.pub_result(action_result);
 }
 
 void SIBA::verify_connection()
