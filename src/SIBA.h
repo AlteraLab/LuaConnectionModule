@@ -18,10 +18,17 @@
 #define MQTT_PORT 1883
 #define REGISTER_EVENT_CODE -1
 
-#define SB_ACTION size_t (*sb_action)(size_t)
+
 
 #include "includes/PubSubClient/PubSubClient.h"
 #include <ESP8266WiFi.h>
+
+typedef struct sb_dataset{
+  size_t type;
+  String value;
+}sb_dataset;
+
+#define SB_ACTION size_t (*sb_action)(size_t, sb_dataset[2], size_t)
 
 typedef struct sb_event{
     int sb_code;
@@ -44,6 +51,7 @@ class SIBA{
         char* dev_type;
         static String mac_address;
         String cur_ip;
+        String msg;
         static size_t is_reg;
 
         WiFiClient espClient;
@@ -53,17 +61,18 @@ class SIBA{
 
         static SIBA context;
 
-        size_t (*grep_event(int code))(size_t);
-        size_t exec_event(SB_ACTION, size_t before);
+        size_t (*grep_event(int code))(size_t,  sb_dataset[2], size_t);
+        size_t exec_event(SB_ACTION, size_t before, sb_dataset d_wrap[2], size_t len);
         size_t pub_result(size_t action_res);
         void regist_dev();
         void subscribe_topic(char* topic);
         void publish_topic(char* topic, char* buffer, uint16_t len);
         void init_wifi(char* ssid, char* pwd);
         void mqtt_reconnect();
+        void parse_call();
         static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length);
 
-        static size_t register_event(size_t before); //0번 코드에 대응되는 이벤트
+        static size_t register_event(size_t before, sb_dataset d_wrap[2], size_t len); //0번 코드에 대응되는 이벤트
 
     public:
         SIBA();

@@ -30,11 +30,13 @@ SIBA::SIBA()
   this->espClient = WiFiClient();
   this->client = PubSubClient(espClient);
   this->is_reg = 0;
+  this->msg = "";
+
 
   this->add_event(REGISTER_EVENT_CODE, SIBA::register_event); //디바이스가 등록됬을 때 수행 될 이벤트
 }
 
-size_t SIBA::register_event(size_t before)
+size_t SIBA::register_event(size_t before, sb_dataset dwrap[2], size_t len)
 {
   //디바이스 정상 등록 시 로그 출력 및 LED 점등
   Serial.println(F("device register is finished"));
@@ -123,7 +125,7 @@ size_t SIBA::add_event(int code, SB_ACTION)
 }
 
 // size_t func(size_t) 타입의 함수 포인터 반환 함수
-size_t (*SIBA::grep_event(int code))(size_t)
+size_t (*SIBA::grep_event(int code))(size_t, sb_dataset[2], size_t)
 {
   //sequential search
   size_t temp_index = action_cnt;
@@ -141,13 +143,14 @@ size_t (*SIBA::grep_event(int code))(size_t)
   return sb_action;
 }
 
-size_t SIBA::exec_event(SB_ACTION, size_t before)
+size_t SIBA::exec_event(SB_ACTION, size_t before, sb_dataset d_wrap[2], size_t len)
 {
+  
   size_t ret = 0;
 
   if (ret = sb_action != NULL)
   {
-    ret = sb_action(before); //액션 수행
+    ret = sb_action(before, d_wrap, len); //액션 수행
   }
   else
   {
@@ -254,9 +257,51 @@ void SIBA::mqtt_reconnect()
   }
 }
 
+void SIBA::parse_call(){
+  //받아온 json문자열 파싱, 파싱 실패시 함수 수행 중단
+  StaticJsonDocument<512> doc;
+  auto error = deserializeJson(doc, this->msg);
+  if (error)
+  {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return;
+  }
+
+  Serial.println(this->msg);
+
+  //json deserialize 수행
+  JsonArray cmd_list = doc[F("c")].as<JsonArray>();
+  int code = -1;
+  size_t action_result=0;
+  for (int i = cmd_list.size() - 1; i >= 0; i--)
+  {
+    JsonObject elem = cmd_list.getElement(i).as<JsonObject>();
+
+    code = elem[F("e")];
+    JsonArray dataset = elem[F("d")];
+
+    sb_dataset d_wrap[2];
+    for(size_t j=0; j<dataset.size(); j++){
+      JsonObject d_arg = dataset.getElement(j).as<JsonObject>();
+      d_wrap[j].type = d_arg[F("type")];
+      d_wrap[j].value = d_arg[F("value")].as<String>();
+    }
+
+    SB_ACTION = context.grep_event(code);
+    action_result = context.exec_event(sb_action, action_result, d_wrap, dataset.size());
+
+  }
+  //code가 -1번이 아니라면 허브에게 결과 전송
+  if (code != -1)
+    context.pub_result(action_result);
+}
+
 void SIBA::mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
 {
-  String msg = "";
+  size_t p_cnt = 0;
+  size_t p_max_cnt = 0;
+  char temp;
 
   Serial.print(F("Message arrived ["));
   Serial.print(topic);
@@ -270,38 +315,28 @@ void SIBA::mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
 
   for (int i = 0; i < length; i++)
   {
-    msg += (char)payload[i];
+    char cur = (char)payload[i];
+    if(p_max_cnt)
+      context.msg += cur;
+
+    if(cur=='/'){
+      if(!p_cnt){
+        p_cnt = temp-48;  
+      }
+      else if(!p_max_cnt){
+        p_max_cnt = temp-48;
+      }  
+    }
+    else{
+      temp =cur;
+    }
   }
 
-  //받아온 json문자열 파싱, 파싱 실패시 함수 수행 중단
-  StaticJsonDocument<256> doc;
-  auto error = deserializeJson(doc, msg);
-  if (error)
-  {
-    Serial.print(F("deserializeJson() failed with code "));
-    Serial.println(error.c_str());
-    return;
+  //마지막 패킷이라면 문자열 parse후 act 수행
+  if(p_cnt == p_max_cnt){
+    context.parse_call();
+    context.msg="";
   }
-
-  Serial.println(msg);
-
-  //json deserialize 수행
-  JsonArray cmd_list = doc[F("cmdList")].as<JsonArray>();
-  int code = -1;
-  size_t action_result=0;
-  for (int i = cmd_list.size() - 1; i >= 0; i--)
-  {
-    JsonObject elem = cmd_list.getElement(i).as<JsonObject>();
-
-    code = elem[F("eventCode")];
-
-    SB_ACTION = context.grep_event(code);
-    action_result = context.exec_event(sb_action, action_result);
-
-  }
-  //code가 -1번이 아니라면 허브에게 결과 전송
-  if (code != -1)
-    context.pub_result(action_result);
 }
 
 void SIBA::verify_connection()
