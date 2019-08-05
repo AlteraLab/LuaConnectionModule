@@ -17,11 +17,15 @@
 #define MQTT_SERVER "192.168.2.1"
 #define MQTT_PORT 1883
 #define REGISTER_EVENT_CODE -1
+#define BLUETOOTH_PIN "1234"
+//#define SIBA_RX 17
+//#define SIBA_TX 18
 
 
 
 #include "includes/PubSubClient/PubSubClient.h"
 #include <ESP8266WiFi.h>
+#include <SoftwareSerial.h>
 
 typedef struct sb_dataset{
   size_t type;
@@ -78,7 +82,7 @@ class SIBA{
         SIBA();
 
         //production 환경에서 사용하는 init
-        size_t init(const char* auth_key); 
+        size_t init(const char* auth_key, const char* dev_name); 
 
         //development 환경에서 사용하는 init
         size_t init(const char* ssid, const char* pwd, const char* dev_type); 

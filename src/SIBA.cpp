@@ -9,6 +9,7 @@
 #include "includes/PubSubClient/PubSubClient.h"
 #include "includes/ArduinoJson/ArduinoJson.h"
 #include <ESP8266WiFi.h>
+#include <SoftwareSerial.h>
 
 #if defined(ESP8266) || defined(ESP32)
 #include <functional>
@@ -44,7 +45,54 @@ size_t SIBA::register_event(size_t before, sb_dataset dwrap[2], size_t len)
   return is_reg;
 }
 
-size_t SIBA::init(const char* auth_key){
+size_t SIBA::init(const char* auth_key, const char* dev_name){
+
+  SoftwareSerial BTSerial(2, 0); // RX | TX
+
+  String ble_msg="";
+  pinMode(4, OUTPUT);  // this pin will change EN state
+  digitalWrite(4, HIGH);  //EN state make HIGH
+  BTSerial.begin(9600);  // HC-06 default speed in AT command more
+  
+  //set name alias and pin
+  String a_set_cmd = String("AT+NAME$siba_")+String(dev_name);
+  BTSerial.print(a_set_cmd);
+  delay(1000);
+  
+  String pin = String(BLUETOOTH_PIN);
+  String p_set_cmd = "AT+PIN"+pin;
+  BTSerial.print(p_set_cmd);
+  delay(1000);
+
+  while(!BTSerial.available()){BTSerial.read();} //buffer clear
+
+  while(1){
+    if(BTSerial.available()){
+      char temp = BTSerial.read();
+      ble_msg += temp;
+      if(temp=='}')
+        break;
+    }
+    delay(200);
+  }
+
+  Serial.println(ble_msg);
+  digitalWrite(4, LOW); //EN state make LOW
+
+  StaticJsonDocument<256> doc;
+  auto error = deserializeJson(doc, ble_msg);
+  if (error)
+  {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return 0;
+  }
+
+  const char* ssid = doc["ssid"];
+  const char* pwd = doc["pwd"];
+
+  this->init(ssid, pwd, auth_key);
+
   return 1;
 }
 
