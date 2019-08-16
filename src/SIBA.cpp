@@ -24,7 +24,6 @@ String SIBA::mac_address;
 
 SIBA::SIBA()
 {
-  //production 이냐 develop 이냐에 따라서 mqtt server의 주소가 달라질 것, 추후에 수정해야
   this->mqtt_server = MQTT_SERVER;
   this->mqtt_port = MQTT_PORT;
 
@@ -210,13 +209,14 @@ size_t SIBA::exec_event(SB_ACTION, size_t before, sb_dataset d_wrap[2], size_t l
   return ret;
 }
 
-size_t SIBA::pub_result(size_t action_res)
+size_t SIBA::pub_result(size_t action_res, int type)
 {
   StaticJsonDocument<256> doc;
   char buffer[256];
 
   JsonObject object = doc.to<JsonObject>();
   object[F("dev_mac")] = this->mac_address;
+  object[F("t")] = type;
 
 
   if (action_res)
@@ -321,12 +321,14 @@ void SIBA::parse_call(){
   //json deserialize 수행
   JsonArray cmd_list = doc[F("c")].as<JsonArray>();
   int code = -1;
+  int type = 0;
   size_t action_result=0;
   for (int i = cmd_list.size() - 1; i >= 0; i--)
   {
     JsonObject elem = cmd_list.getElement(i).as<JsonObject>();
 
     code = elem[F("e")];
+    type = elem[F("t")];
     JsonArray dataset = elem[F("d")];
 
     sb_dataset d_wrap[2];
@@ -341,8 +343,15 @@ void SIBA::parse_call(){
 
   }
   //code가 -1번이 아니라면 허브에게 결과 전송
-  if (code != -1)
-    context.pub_result(action_result);
+  if (code != -1){
+    context.pub_result(action_result, type);
+  }
+  else{
+    //-1이라면 상태 값 생성 요청
+    if(context.init_call!=NULL){
+      context.init_call();
+    };
+  }
 }
 
 void SIBA::mqtt_callback(char *topic, uint8_t *payload, unsigned int length)
@@ -394,4 +403,36 @@ void SIBA::verify_connection()
     this->mqtt_reconnect();
   }
   this->client.loop();
+}
+
+void SIBA::send_to_hub(char* data_key, int value, char* topic){
+  StaticJsonDocument<256> doc;
+  char buffer[256];
+
+  JsonObject object = doc.to<JsonObject>();
+  object[F("key")] = data_key;
+  object[F("val")] = value;
+  object[F("mac")] = this->mac_address;
+
+  uint16_t n = serializeJson(doc, buffer);
+
+  this->publish_topic(topic, buffer, n);
+}
+
+void SIBA::set_state(char* data_key, int value)
+{
+  this->send_to_hub(data_key, value, DEV_SET_STATE);
+}
+
+void SIBA::init_state(char* data_key, int value)
+{
+  Serial.println("init state-------");
+  this->send_to_hub(data_key, value, DEV_INIT_STATE);
+}
+
+size_t SIBA::init_regist(INIT_GROUP){
+
+  this->init_call = init_group;
+
+  return 1;
 }
