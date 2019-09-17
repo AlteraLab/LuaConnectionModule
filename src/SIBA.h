@@ -64,6 +64,7 @@ typedef union sb_data{
   int sb_int;
   double sb_double;
   char sb_char;
+  char* sb_string;
   //String sb_string;
 }siba_data;
 
@@ -132,7 +133,7 @@ class SIBA{
 
         static size_t register_event(size_t before, sb_dataset d_wrap[2], size_t len); //0번 코드에 대응되는 이벤트
 
-        void send_to_hub(char* data_key, sb_data temp, size_t type);
+        void send_to_hub(char* data_key, sb_data temp, size_t type, char* topic);
 
         void act_sensing();
 
@@ -161,17 +162,19 @@ class SIBA{
         sb_data get_state(char* key);
 
         //상태 설정
-        void set_state(char* data_key, byte value, size_t option);
+        void set_state(char* data_key, bool value, size_t option);
         void set_state(char* data_key, int value, size_t option);
         void set_state(char* data_key, double value, size_t option);
         void set_state(char* data_key, char value, size_t option);
+        void set_state(char* data_key, char* value, size_t option);
         //void set_state(char* data_key, String value, size_t option);
 
         //상태 초기화
-        void init_state(char* key, byte value, size_t option);
+        void init_state(char* key, bool value, size_t option);
         void init_state(char* key, int value, size_t option);
         void init_state(char* key, double value, size_t option);
         void init_state(char* key, char value, size_t option);
+        void init_state(char* key, char* value, size_t option);
         //void init_state(char* key, String value, size_t option);
 
         //센싱

@@ -437,7 +437,8 @@ void SIBA::verify_connection()
   this->client.loop();
 
   //등록이 됬다면
-  if (context.is_reg && sensing_cnt)
+  //Serial.println(context.is_reg);
+  if (context.is_reg==1 && sensing_cnt)
   {
     context.internal_curr = millis();
     if (context.internal_curr - context.internal_prev > this->sensing_time)
@@ -449,7 +450,7 @@ void SIBA::verify_connection()
   }
 }
 
-void SIBA::send_to_hub(char *key, sb_data temp, size_t type)
+void SIBA::send_to_hub(char *key, sb_data temp, size_t type, char* topic)
 {
   StaticJsonDocument<256> doc;
   char buffer[256];
@@ -470,6 +471,8 @@ void SIBA::send_to_hub(char *key, sb_data temp, size_t type)
       case SB_CHAR:
         object[F("val")] = temp.sb_char;
         break;
+      case SB_STRING:
+        object[F("val")] = temp.sb_string;
       default:
         //object[F("val")] = temp.sb_string;
         break;
@@ -477,8 +480,7 @@ void SIBA::send_to_hub(char *key, sb_data temp, size_t type)
   object[F("mac")] = this->mac_address;
 
   uint16_t n = serializeJson(doc, buffer);
-
-  this->publish_topic(DEV_INIT_STATE, buffer, n);
+  this->publish_topic(topic, buffer, n);
 }
 
 int SIBA::find_state_idx(char* key){
@@ -494,7 +496,7 @@ void SIBA::init_state_local(char *key, size_t type, sb_data temp){
   state_store[state_cnt++] = {key, type, temp};
 }
 
-void SIBA::set_state(char *data_key, byte value, size_t option=1)
+void SIBA::set_state(char *data_key, bool value, size_t option=1)
 {
   if(option){
     size_t idx = find_state_idx(data_key);
@@ -503,7 +505,7 @@ void SIBA::set_state(char *data_key, byte value, size_t option=1)
     }
   }
   sb_data temp = { value };
-  this->send_to_hub(data_key, temp, SB_BYTE);
+  this->send_to_hub(data_key, temp, SB_BYTE, DEV_SET_STATE);
 }
 
 void SIBA::set_state(char *data_key, int value, size_t option=1)
@@ -515,7 +517,7 @@ void SIBA::set_state(char *data_key, int value, size_t option=1)
     }
   }
   sb_data temp = { value };
-  this->send_to_hub(data_key, temp, SB_INT);
+  this->send_to_hub(data_key, temp, SB_INT, DEV_SET_STATE);
 }
 
 void SIBA::set_state(char *data_key, double value, size_t option=1)
@@ -527,7 +529,7 @@ void SIBA::set_state(char *data_key, double value, size_t option=1)
     }
   }
   sb_data temp = { value };
-  this->send_to_hub(data_key, temp, SB_DOUBLE);
+  this->send_to_hub(data_key, temp, SB_DOUBLE, DEV_SET_STATE);
 }
 
 void SIBA::set_state(char *data_key, char value, size_t option=1)
@@ -539,15 +541,28 @@ void SIBA::set_state(char *data_key, char value, size_t option=1)
     }
   }
   sb_data temp = { value };
-  this->send_to_hub(data_key, temp, SB_CHAR);
+  this->send_to_hub(data_key, temp, SB_CHAR, DEV_SET_STATE);
 }
 
-void SIBA::init_state(char *key, byte value, size_t option=1)
+void SIBA::set_state(char *data_key, char* value, size_t option=1)
+{
+  if(option){
+    size_t idx = find_state_idx(data_key);
+    if(idx!=-1){
+      state_store[idx].value.sb_string = value;
+    }
+  }
+  sb_data temp;
+  temp.sb_string= { value };
+  this->send_to_hub(data_key, temp, SB_STRING, DEV_SET_STATE);
+}
+
+void SIBA::init_state(char *key, bool value, size_t option=1)
 {
   if(state_cnt != STATE_COUNT_LIMIT){
     sb_data temp = { value };
-    if(option) this->init_state_local(key, SB_INT, temp);
-    this->send_to_hub(key, temp, SB_BYTE);
+    if(option) this->init_state_local(key, SB_BYTE, temp);
+    this->send_to_hub(key, temp, SB_BYTE, DEV_INIT_STATE);
   }
 }
 
@@ -556,7 +571,7 @@ void SIBA::init_state(char *key, int value, size_t option=1)
   if(state_cnt != STATE_COUNT_LIMIT){
     sb_data temp = { value };
     if(option) this->init_state_local(key, SB_INT, temp);
-    this->send_to_hub(key, temp, SB_INT);
+    this->send_to_hub(key, temp, SB_INT, DEV_INIT_STATE);
   }
 }
 
@@ -564,8 +579,8 @@ void SIBA::init_state(char *key, double value, size_t option=1)
 {
   if(state_cnt != STATE_COUNT_LIMIT){
     sb_data temp = { value };
-    if(option) this->init_state_local(key, SB_INT, temp);
-    this->send_to_hub(key, temp, SB_DOUBLE);
+    if(option) this->init_state_local(key, SB_DOUBLE, temp);
+    this->send_to_hub(key, temp, SB_DOUBLE, DEV_INIT_STATE);
   }
 }
 
@@ -573,8 +588,19 @@ void SIBA::init_state(char *key, char value, size_t option=1)
 {
   if(state_cnt != STATE_COUNT_LIMIT){
     sb_data temp = { value };
-    if(option) this->init_state_local(key, SB_INT, temp);
-    this->send_to_hub(key, temp, SB_CHAR);
+    if(option) this->init_state_local(key, SB_CHAR, temp);
+    this->send_to_hub(key, temp, SB_CHAR, DEV_INIT_STATE);
+  }
+}
+
+void SIBA::init_state(char *key, char* value, size_t option=1)
+{
+  if(state_cnt != STATE_COUNT_LIMIT){
+    //sb_data temp = { value };
+    sb_data temp;
+    temp.sb_string= { value };
+    if(option) this->init_state_local(key, SB_STRING, temp);
+    this->send_to_hub(key, temp, SB_STRING, DEV_INIT_STATE);
   }
 }
 
