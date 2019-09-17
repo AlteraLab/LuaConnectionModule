@@ -8,6 +8,7 @@
 #######################################
 
 SIBA	KEYWORD1
+sb_dataset	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -16,6 +17,9 @@ SIBA	KEYWORD1
 init 	KEYWORD2
 add_event 	KEYWORD2
 verify_connection 	KEYWORD2
+init_regist    KEYWORD2
+init_state    KEYWORD2
+reserve_sensing    KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
